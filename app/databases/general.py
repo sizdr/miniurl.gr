@@ -50,13 +50,14 @@ class BaseDBActions(ABC):
 
     async def increase_click(self, alias: str):
         url_record = self.get_url_by_alias(alias, return_object=True)
-        if url_record:
-            with self._get_session() as session:
-                url_record.total_clicks = url_record.total_clicks + 1
-                session.add(url_record)
-                session.commit()
-                logger.debug(f"Click count increased for alias: {alias} to {url_record.total_clicks}")
-                return url_record.total_clicks
+        if not url_record:
+            return None
+        with self._get_session() as session:
+            url_record.total_clicks = url_record.total_clicks + 1
+            session.add(url_record)
+            session.commit()
+            logger.debug(f"Click count increased for alias: {alias} to {url_record.total_clicks}")
+            return url_record.total_clicks
 
     def get_last_id(self):
         """Get the last inserted ID in the Urls table"""
