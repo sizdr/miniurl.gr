@@ -1,5 +1,7 @@
 import logging
-from typing import Union
+from typing import Union, Optional
+from contextlib import contextmanager
+from abc import ABC,abstractmethod
 
 from pydantic import HttpUrl
 from sqlmodel import Session, select
@@ -11,19 +13,19 @@ from app.databases.models import Urls
 
 logger = logging.getLogger(__name__)
 
-
-class DBActions:
-    def __init__(self, db_session=None):
-        _manager = DatabaseManager()
-        self.db_session = db_session or _manager.get_db_instance()
-
+class BaseDBActions(ABC):
+    @abstractmethod
+    @contextmanager
+    def _get_session(self):
+        ...
+          
     def add_url(self, alias: str, original_url: Union[HttpUrl, str], description: str = None):
         urls_data = {
             "alias": alias,
             "original_url": original_url,
             "description": description
         }
-        with Session(self.db_session) as session:
+        with self._get_session() as session:
             url_obj = Urls(**urls_data)
             session.add(url_obj)
             try:
@@ -39,7 +41,7 @@ class DBActions:
 
     def get_url_by_alias(self, alias: str, return_object=False):
         """Get url based on alias"""
-        with Session(self.db_session) as session:
+        with self._get_session() as session:
             statement = select(Urls).where(Urls.alias == alias)
             result = session.exec(statement).first()
             if return_object:
@@ -49,7 +51,7 @@ class DBActions:
     async def increase_click(self, alias: str):
         url_record = self.get_url_by_alias(alias, return_object=True)
         if url_record:
-            with Session(self.db_session) as session:
+            with self._get_session() as session:
                 url_record.total_clicks = url_record.total_clicks + 1
                 session.add(url_record)
                 session.commit()
@@ -58,11 +60,29 @@ class DBActions:
 
     def get_last_id(self):
         """Get the last inserted ID in the Urls table"""
-        with Session(self.db_session) as session:
+        with self._get_session() as session:
             statement = select(Urls).order_by(Urls.id.desc())
             result = session.exec(statement).first()
             return result.id if result else None
+        
 
+
+class DBActionsHTTP(BaseDBActions):
+    def __init__(self, session:Session):
+        self.session = session
+
+    @contextmanager
+    def _get_session(self): 
+        yield self.session
+
+
+class DBActionsBackground(BaseDBActions):    
+    @contextmanager
+    def _get_session(self): 
+        engine = DatabaseManager.get_db_instance()
+        with Session(engine) as session:
+            yield session
+        
 
 async def resolve_url_from_dbs(alias: str, got_from_cache=False):
     """
@@ -77,16 +97,17 @@ async def resolve_url_from_dbs(alias: str, got_from_cache=False):
         original_url = from_cache
     else:
         # URL not found in cache, check the db
-        actions = DBActions()
+        actions = DBActionsBackground()
         original_url = actions.get_url_by_alias(alias=alias)
 
     if got_from_cache:
         return original_url, from_cache
     return original_url
 
+
 async def increase_click(alias: str):
     """
     Increase click count for a given alias.
     """
-    actions = DBActions()
+    actions = DBActionsBackground()
     await actions.increase_click(alias)
