@@ -9,7 +9,7 @@ from app.databases.serializers import UrlRequestRecord
 
 from app.utils.generators import get_random_url_string
 from app.errors.api_errors import NotFound
-from app.api.deps import DBActionsHTTPDependency
+from app.api.deps import DBActionsHTTPDependency, ValidAliasDependency
 
 
 logger = logging.getLogger(__name__)
@@ -51,17 +51,15 @@ async def minify_url(
 
 @router.get("/{alias}", responses=rate_limit_response)
 @limiter.limit("30/minute")
-async def resolve_url(request: Request, alias: str, background_tasks: BackgroundTasks):
+async def resolve_url(
+    request: Request, 
+    alias: ValidAliasDependency, 
+    background_tasks: BackgroundTasks):
     """
     Resolve a minified url alias to its original url.
     No redirect, just return the original URL in JSON.
     """
     original_url = await resolve_url_from_dbs(alias)
-    background_tasks.add_task(increase_click, alias)
-
-    if not original_url:
-        raise NotFound("Requested url not found")
-    
+    background_tasks.add_task(increase_click, alias)    
     background_tasks.add_task(save_to_cache, alias, original_url)
-
     return {"url": original_url}
