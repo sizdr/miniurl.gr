@@ -1,5 +1,5 @@
 import logging
-from typing import Union, Optional
+from typing import Union, Optional, Generator
 from contextlib import contextmanager
 from abc import ABC,abstractmethod
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class BaseDBActions(ABC):
     @abstractmethod
     @contextmanager
-    def _get_session(self):
+    def _get_session(self) -> Generator[Session, None, None]:
         ...
           
     def add_url(self, alias: str, original_url: Union[HttpUrl, str], description: str = None):
