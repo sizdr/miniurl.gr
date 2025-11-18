@@ -61,10 +61,11 @@ class BaseDBActions(ABC):
             return result.original_url if result else None
 
     async def increase_click(self, alias: str):
-        url_record = self.get_url_by_alias(alias, return_object=True)
-        if not url_record:
-            return None
         with self._get_session() as session:
+            statement = select(Urls).where(Urls.alias == alias)
+            url_record = session.exec(statement).first()
+            if not url_record:
+                return None
             url_record.total_clicks = url_record.total_clicks + 1
             session.add(url_record)
             session.commit()
