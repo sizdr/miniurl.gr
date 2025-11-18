@@ -14,9 +14,21 @@ from app.databases.models import Urls
 logger = logging.getLogger(__name__)
 
 class BaseDBActions(ABC):
+    """
+    Abstract base class for database actions related to URL shortening.
+    
+    Provides core methods for adding URLs, retrieving by alias, increasing click counts,
+    and fetching the last inserted ID. Subclasses must provide a session context via
+    `_get_session`.
+    """
     @abstractmethod
     @contextmanager
     def _get_session(self) -> Generator[Session, None, None]:
+        """
+        Context manager to provide a database session.
+
+        Must be implemented by subclasses.
+        """
         ...
           
     def add_url(self, alias: str, original_url: Union[HttpUrl, str], description: str = None):
@@ -59,7 +71,7 @@ class BaseDBActions(ABC):
             logger.debug(f"Click count increased for alias: {alias} to {url_record.total_clicks}")
             return url_record.total_clicks
 
-    def get_last_id(self):
+    def get_last_id(self) -> Optional[int]:
         """Get the last inserted ID in the Urls table"""
         with self._get_session() as session:
             statement = select(Urls).order_by(Urls.id.desc())
@@ -69,17 +81,29 @@ class BaseDBActions(ABC):
 
 
 class DBActionsHTTP(BaseDBActions):
+    """
+    Database actions using a provided HTTP request session.
+
+    Intended for use when the session is externally managed.
+    """
     def __init__(self, session:Session):
         self.session = session
 
     @contextmanager
     def _get_session(self): 
+        """Yield the provided session."""
         yield self.session
 
 
-class DBActionsBackground(BaseDBActions):    
+class DBActionsBackground(BaseDBActions):  
+    """
+    Database actions using a new session from the DatabaseManager.
+
+    Intended for background tasks where the session is not externally managed.
+    """  
     @contextmanager
     def _get_session(self): 
+        """Create and yield a session for background operations."""
         engine = DatabaseManager.get_db_instance()
         with Session(engine) as session:
             yield session
